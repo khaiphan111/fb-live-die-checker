@@ -26,6 +26,7 @@ def resource_dir() -> str:
 
 
 DB_PATH = os.path.join(base_dir(), "data.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 STATIC_DIR = os.path.join(resource_dir(), "static")
 
 DEFAULT_SETTINGS = {
