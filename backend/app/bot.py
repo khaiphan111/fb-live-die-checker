@@ -223,7 +223,56 @@ async def on_check(msg: Message):
         header += f" trong {days} ngày"
     await _send_card(msg.bot, msg.chat.id, res["uid"], status, note, price, avatar, header)
 
+import io
 
+@router.message(F.document)
+async def on_document(msg: Message):
+    user = db.get_user(msg.from_user.id)
+    if not user:
+        await msg.answer("Bạn chưa /start. Gõ /start trước nhé.")
+        return
+    if not _sub_active(user):
+        await msg.answer("Bạn cần có gói còn hạn để dùng tính năng này. Gõ /sub để mua gói.")
+        return
+
+    doc = msg.document
+    if not doc.file_name.endswith(".txt"):
+        await msg.answer("Vui lòng gửi file định dạng .txt")
+        return
+
+    m = await msg.answer("Đang tải và xử lý file, vui lòng đợi...")
+    try:
+        file_in_memory = io.BytesIO()
+        await msg.bot.download(doc, destination=file_in_memory)
+        text_data = file_in_memory.getvalue().decode("utf-8", errors="ignore")
+
+        lines = [line.strip() for line in text_data.split("\n") if line.strip()]
+        if not lines:
+            await m.edit_text("File trống hoặc không có nội dung hợp lệ!")
+            return
+
+        success_count = 0
+        for line in lines:
+            parts = [p.strip() for p in line.split("|")]
+            uid_raw = parts[0]
+            if not uid_raw: continue
+            note = parts[1] if len(parts) > 1 else ""
+            price = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+            days = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 0
+
+            res = await fb.check_uid(uid_raw)
+            status = "live" if res["alive"] else "die"
+            avatar = res["avatar_url"] or fb.avatar_url(uid_raw)
+            expire_at = now() + days * DAY if days else 0
+            
+            wid = db.add_watch(msg.from_user.id, res["uid"], note, price, expire_at)
+            db.update_watch_status(wid, status, avatar)
+            db.add_log("add", f"Bulk thêm UID {res['uid']} ({status})", msg.from_user.id, res["uid"])
+            success_count += 1
+
+        await m.edit_text(f"Đã xử lý xong file!\n✅ Thêm thành công **{success_count}/{len(lines)}** UID vào hệ thống.", parse_mode="Markdown")
+    except Exception as e:
+        await m.edit_text(f"Có lỗi xảy ra khi xử lý file: {str(e)}")
 @router.message(F.text & ~F.text.startswith("/"))
 async def on_other(msg: Message):
     await msg.answer("Gõ /menu để xem các chức năng, hoặc /help để được hướng dẫn.", reply_markup=MENU)
