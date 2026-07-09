@@ -1,0 +1,134 @@
+// FB Live/Die Checker — Tác giả: @nhanxp | Hỗ trợ: Telegram/Facebook nhanxp
+import {
+  IconActivity,
+  IconDeviceDesktop,
+  IconHistory,
+  IconInfoCircle,
+  IconListCheck,
+  IconLogout,
+  IconMoon,
+  IconSettings,
+  IconSun,
+  IconUsers,
+} from "@tabler/icons-react";
+import { useEffect, useState } from "react";
+import toast, { Toaster } from "react-hot-toast";
+import { Button } from "./components/ui";
+import { api, clearToken, getToken } from "./lib/api";
+import { useTheme } from "./lib/theme";
+import About from "./pages/About";
+import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
+import Logs from "./pages/Logs";
+import Settings from "./pages/Settings";
+import Users from "./pages/Users";
+import Watches from "./pages/Watches";
+
+const NAV = [
+  { key: "dashboard", label: "Tổng quan", icon: IconActivity },
+  { key: "watches", label: "Theo dõi", icon: IconListCheck },
+  { key: "users", label: "Người dùng", icon: IconUsers },
+  { key: "logs", label: "Nhật ký", icon: IconHistory },
+  { key: "settings", label: "Cấu hình", icon: IconSettings },
+  { key: "about", label: "Giới thiệu", icon: IconInfoCircle },
+];
+
+export default function App() {
+  const [authed, setAuthed] = useState(!!getToken());
+  const [tab, setTab] = useState("dashboard");
+  const [status, setStatus] = useState<any>(null);
+  const { dark, toggle } = useTheme();
+
+  async function refreshStatus() {
+    try {
+      setStatus(await api("/api/status"));
+    } catch (e: any) {
+      if (String(e.message).includes("đăng nhập")) setAuthed(false);
+    }
+  }
+
+  useEffect(() => {
+    if (authed) refreshStatus();
+  }, [authed]);
+
+  if (!authed) {
+    return (
+      <>
+        <Toaster position="top-right" />
+        <Login onLogin={() => setAuthed(true)} />
+      </>
+    );
+  }
+
+  function logout() {
+    clearToken();
+    setAuthed(false);
+    toast.success("Đã đăng xuất");
+  }
+
+  const setupNeeded = status && !status.setup_done;
+
+  return (
+    <div className="min-h-screen flex">
+      <Toaster position="top-right" />
+      <aside className="w-60 border-r border-border p-4 flex flex-col gap-1 shrink-0">
+        <div className="flex items-center gap-2 px-2 py-3 mb-2">
+          <IconDeviceDesktop size={22} stroke={1.75} />
+          <div className="font-semibold leading-tight">
+            FB Live/Die
+            <div className="text-xs text-muted-foreground font-normal">@nhanxp</div>
+          </div>
+        </div>
+        {NAV.map((n) => {
+          const Icon = n.icon;
+          const active = tab === n.key;
+          return (
+            <button
+              key={n.key}
+              onClick={() => setTab(n.key)}
+              className={
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors " +
+                (active ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted")
+              }
+            >
+              <Icon size={18} stroke={1.75} />
+              {n.label}
+              {n.key === "settings" && setupNeeded && (
+                <span className="ml-auto h-2 w-2 rounded-full bg-die" />
+              )}
+            </button>
+          );
+        })}
+        <div className="mt-auto flex flex-col gap-1">
+          <Button variant="ghost" size="sm" onClick={toggle} className="justify-start">
+            {dark ? <IconSun size={18} /> : <IconMoon size={18} />}
+            {dark ? "Giao diện sáng" : "Giao diện tối"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={logout} className="justify-start">
+            <IconLogout size={18} />
+            Đăng xuất
+          </Button>
+        </div>
+      </aside>
+
+      <main className="flex-1 p-8 max-w-6xl">
+        {setupNeeded && tab !== "settings" && (
+          <div className="mb-6 rounded-lg border border-die/30 bg-die/10 px-4 py-3 text-sm flex items-center gap-2">
+            <IconSettings size={18} className="text-die" />
+            Chưa hoàn tất thiết lập. Vào{" "}
+            <button className="font-medium underline" onClick={() => setTab("settings")}>
+              Cấu hình
+            </button>{" "}
+            để nhập Bot Token trước khi sử dụng.
+          </div>
+        )}
+        {tab === "dashboard" && <Dashboard status={status} onRefresh={refreshStatus} />}
+        {tab === "watches" && <Watches />}
+        {tab === "users" && <Users />}
+        {tab === "logs" && <Logs />}
+        {tab === "settings" && <Settings onSaved={refreshStatus} />}
+        {tab === "about" && <About />}
+      </main>
+    </div>
+  );
+}
